@@ -1,0 +1,175 @@
+import { expect, type BrowserContext, type Page } from "@playwright/test";
+import path from "path";
+import type { AuthSession } from "./corpx-api";
+import type { TestUser } from "./test-data";
+
+const sampleImagePath = path.resolve(process.cwd(), "tests/fixtures/sample-image.svg");
+
+const openSelectForLabel = async (page: Page, label: string) => {
+  const labelLocator = page.getByText(label, { exact: true }).first();
+  await labelLocator.locator('xpath=following::button[@role="combobox"][1]').click();
+};
+
+const selectRadixOption = async (page: Page, triggerLabel: string, optionText: string) => {
+  await openSelectForLabel(page, triggerLabel);
+  await page.getByRole("option", { name: optionText, exact: true }).click();
+};
+
+export const signInViaOtpFlow = async (page: Page, user: TestUser): Promise<AuthSession> => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page).toHaveURL(/\/otp-email$/);
+
+  await page.getByPlaceholder("you@company.com").fill(user.email);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/otp-verify$/);
+
+  await page.getByPlaceholder("Raja").fill(user.firstName);
+  await page.getByPlaceholder("Sekhar").fill(user.lastName);
+  await page.getByPlaceholder("e.g. TechCorp").fill(user.organization);
+  await page.getByPlaceholder("e.g. 9876543210").fill(user.phone);
+
+  await selectRadixOption(page, "City", user.city);
+  await page.getByRole("button", { name: /Get Started/ }).click();
+
+  await expect(page).toHaveURL(/\/index$/);
+  await expect(page.getByRole("heading", { name: "Recent Listings" })).toBeVisible();
+
+  const session = await page.evaluate(() => {
+    const token = localStorage.getItem("authToken");
+    const storedUser = localStorage.getItem("user");
+    return {
+      token,
+      user: storedUser ? JSON.parse(storedUser) : null,
+    };
+  });
+
+  if (!session.token || !session.user) {
+    throw new Error("Login did not populate local storage as expected.");
+  }
+
+  return session as AuthSession;
+};
+
+export const updateProfile = async (page: Page, profile: { department: string; designation: string; address: string; bio: string }) => {
+  await page.goto("/create-profile");
+  await expect(page.getByRole("heading", { name: "Edit Profile" })).toBeVisible();
+
+  await page.getByLabel("Department").fill(profile.department);
+  await page.getByLabel("Designation").fill(profile.designation);
+  await page.getByLabel("Address").fill(profile.address);
+  await page.getByLabel("Bio").fill(profile.bio);
+
+  const profileSaveResponse = page.waitForResponse(
+    (response) => response.url().includes("/api/v1/users/profile") && response.request().method() === "PUT"
+  );
+  await page.getByRole("button", { name: "Save Profile" }).click();
+
+  const response = await profileSaveResponse;
+  if (!response.ok()) {
+    throw new Error(`Profile save failed with status ${response.status()}`);
+  }
+
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByText(profile.designation)).toBeVisible();
+};
+
+export const createMarketplaceItem = async (page: Page, itemTitle: string) => {
+  await page.goto("/post-item");
+  await expect(page.getByRole("heading", { name: /Sell or Rent an Item|Edit Item/ })).toBeVisible();
+
+  await page.locator('input[type="file"][multiple]').setInputFiles(sampleImagePath);
+  await page.waitForTimeout(2300);
+
+  await page.getByLabel("Item Title").fill(itemTitle);
+  await selectRadixOption(page, "Category", "Electronics");
+  await page.getByLabel("Price").fill("85000");
+  await selectRadixOption(page, "Condition", "Like New");
+  await page.getByLabel("Additional Details").fill(`Automated listing for ${itemTitle}`);
+  await page.getByRole("button", { name: /Preview & Post Item|Update Item/i }).click();
+
+  await expect(page).toHaveURL(/\/view-posts\?tab=marketplace$/);
+  await expect(page.getByText(itemTitle)).toBeVisible();
+};
+
+export const favoriteRecentListingFromHome = async (page: Page, itemTitle: string) => {
+  await page.goto("/index");
+  const card = page.locator("div.bg-white.rounded-2xl").filter({ hasText: itemTitle }).first();
+  await expect(card).toBeVisible();
+  await card.getByRole("button").first().click();
+};
+
+export const openItemDetailsAndStartWhatsAppChat = async (page: Page, itemId: number) => {
+  await page.goto(`/item/${itemId}`);
+  await expect(page.getByRole("heading", { name: "Item Details" })).toBeVisible();
+
+  const popupPromise = page.context().waitForEvent("page");
+  await page.getByTitle("Chat seller").click();
+  const popup = await popupPromise;
+  await popup.waitForLoadState("domcontentloaded").catch(() => undefined);
+  return popup.url();
+};
+
+export const createJobPost = async (page: Page, jobTitle: string, city: string) => {
+  await page.goto("/post-job");
+  await expect(page.getByRole("heading", { name: "Share a Job Opening" })).toBeVisible();
+
+  await page.getByLabel("Job Title").fill(jobTitle);
+  await page.getByLabel("Department").fill("Engineering");
+  await page.getByLabel("Location").fill(city);
+  await selectRadixOption(page, "Job Type", "Full-time");
+  await selectRadixOption(page, "Experience Required", "1-3 years");
+  await page.getByLabel("Salary Range (₹)").fill("12-18 LPA");
+  await page.getByLabel("Preferred Skill Sets").fill("TypeScript, React, Spring Boot");
+  await page.getByLabel("Other Requirements").fill("Strong communication and collaboration");
+  await page.getByLabel("Detailed Description").fill(`Automated job post for ${jobTitle}`);
+  await page.getByRole("button", { name: "Post Job Opening" }).click();
+
+  await expect(page).toHaveURL(/\/view-posts\?tab=jobs$/);
+  await expect(page.getByText(jobTitle)).toBeVisible();
+};
+
+export const verifyJobDetails = async (page: Page, jobId: number, jobTitle: string) => {
+  await page.goto(`/job/${jobId}`);
+  await expect(page.getByRole("heading", { name: "Job Details" })).toBeVisible();
+  await expect(page.getByText(jobTitle)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply via Email" })).toBeVisible();
+};
+
+export const createEventPost = async (page: Page, eventTitle: string, city: string) => {
+  await page.goto("/post-event");
+  await expect(page.getByRole("heading", { name: "Publish an Event" })).toBeVisible();
+
+  await page.getByLabel("Event Title").fill(eventTitle);
+  await selectRadixOption(page, "Event Type", "Networking");
+  await page.getByLabel("Date").fill("2026-12-20");
+  await page.getByLabel("Time").fill("18:30");
+  await selectRadixOption(page, "City", city);
+  await page.getByLabel("Venue / Meeting Point").fill("CorpX Automation Cafe");
+  await page.getByLabel("Event Description").fill(`Automated event for ${eventTitle}`);
+  await page.getByLabel("Interests & Skills Needed").fill("Networking, mentoring, product discussions");
+  await page.getByLabel("Maximum Participants").fill("25");
+  await page.getByLabel("Cost per Person (₹)").fill("0");
+  await page.getByRole("button", { name: "Publish Event" }).click();
+
+  await expect(page).toHaveURL(/\/event\/\d+|\/view-posts\?tab=events/);
+};
+
+export const showInterestAndOpenEventWhatsApp = async (page: Page, eventId: number) => {
+  await page.goto(`/event/${eventId}`);
+  await expect(page.getByRole("heading", { name: "Event Details" })).toBeVisible();
+  await page.getByRole("button", { name: "Show Interest" }).click();
+  await expect(page.getByRole("button", { name: "Interested" })).toBeVisible();
+
+  const popupPromise = page.context().waitForEvent("page");
+  await page.getByRole("button", { name: "WhatsApp" }).click();
+  const popup = await popupPromise;
+  await popup.waitForLoadState("domcontentloaded").catch(() => undefined);
+  return popup.url();
+};
+
+export const closeContextPages = async (context: BrowserContext | null) => {
+  if (context) {
+    await context.close();
+  }
+};

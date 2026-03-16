@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#dcfce7" />
+  <rect x="24" y="24" width="352" height="252" rx="24" fill="#16a34a" opacity="0.12" />
+  <circle cx="115" cy="105" r="36" fill="#22c55e" opacity="0.8" />
+  <path d="M48 230L140 150L205 205L248 170L352 250H48Z" fill="#15803d" opacity="0.85" />
+  <text x="200" y="70" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle" fill="#166534">CorpX Test Image</text>
+  <text x="200" y="104" font-family="Arial, sans-serif" font-size="16" text-anchor="middle" fill="#166534">Used for automated marketplace posting</text>
+</svg>
