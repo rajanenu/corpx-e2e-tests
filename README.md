@@ -40,6 +40,12 @@ npx playwright install chromium
 npm test
 ```
 
+Pre-production gate command (recommended before deploy):
+
+```bash
+npm run preprod:gate
+```
+
 4. Open the HTML report when needed:
 
 ```bash
