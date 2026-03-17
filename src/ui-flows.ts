@@ -23,6 +23,9 @@ export const signInViaOtpFlow = async (page: Page, user: TestUser): Promise<Auth
   await page.getByPlaceholder("you@company.com").fill(user.email);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/otp-verify$/);
+  // Enter the OTP code (fixed OTP is used in CI; in real env it's sent by email)
+  await page.getByPlaceholder("Enter the 6-digit code sent to your email").fill(config.fixedOtp);
+
 
   await page.getByPlaceholder("Raja").fill(user.firstName);
   await page.getByPlaceholder("Sekhar").fill(user.lastName);
