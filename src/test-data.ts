@@ -29,7 +29,7 @@ export const createTestRunData = (): TestRunData => {
     runId,
     userA: {
       key: "userA",
-      email: `${runId}.seller@corpx.test`,
+      email: `${runId}.seller@tesco.com`,
       firstName: "Seller",
       lastName: "User",
       phone: buildPhone(now),
@@ -38,7 +38,7 @@ export const createTestRunData = (): TestRunData => {
     },
     userB: {
       key: "userB",
-      email: `${runId}.buyer@corpx.test`,
+      email: `${runId}.buyer@tesco.com`,
       firstName: "Buyer",
       lastName: "User",
       phone: buildPhone(now + 111111),

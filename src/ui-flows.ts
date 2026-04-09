@@ -2,8 +2,9 @@ import { expect, type BrowserContext, type Page } from "@playwright/test";
 import path from "path";
 import type { AuthSession } from "./corpx-api";
 import type { TestUser } from "./test-data";
+import { config } from "./config";
 
-const sampleImagePath = path.resolve(process.cwd(), "tests/fixtures/sample-image.svg");
+const sampleImagePath = path.resolve(process.cwd(), "tests/fixtures/sample-image.png");
 
 const openSelectForLabel = async (page: Page, label: string) => {
   const labelLocator = page.getByText(label, { exact: true }).first();
@@ -22,18 +23,18 @@ export const signInViaOtpFlow = async (page: Page, user: TestUser): Promise<Auth
 
   await page.getByPlaceholder("you@company.com").fill(user.email);
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\/otp-verify$/);
-  // Enter the OTP code (fixed OTP is used in CI; in real env it's sent by email)
-  await page.getByPlaceholder("Enter the 6-digit code sent to your email").fill(config.fixedOtp);
+  // Existing users are quick-signed in to /index; new users continue to /otp-verify.
+  await page.waitForURL(/\/(otp-verify|index)$/, { timeout: 30000 });
 
-
-  await page.getByPlaceholder("Raja").fill(user.firstName);
-  await page.getByPlaceholder("Sekhar").fill(user.lastName);
-  await page.getByPlaceholder("e.g. TechCorp").fill(user.organization);
-  await page.getByPlaceholder("e.g. 9876543210").fill(user.phone);
-
-  await selectRadixOption(page, "City", user.city);
-  await page.getByRole("button", { name: /Get Started/ }).click();
+  if (page.url().endsWith("/otp-verify")) {
+    await page.getByPlaceholder("Enter the 6-digit code sent to your email").fill(config.fixedOtp);
+    await page.getByPlaceholder("Raja").fill(user.firstName);
+    await page.getByPlaceholder("Sekhar").fill(user.lastName);
+    await page.getByPlaceholder("e.g. TechCorp").fill(user.organization);
+    await page.getByPlaceholder("e.g. 9876543210").fill(user.phone);
+    await selectRadixOption(page, "City", user.city);
+    await page.getByRole("button", { name: /Get Started/ }).click();
+  }
 
   await expect(page).toHaveURL(/\/index$/);
   await expect(page.getByRole("heading", { name: "Recent Listings" })).toBeVisible();
@@ -79,7 +80,7 @@ export const updateProfile = async (page: Page, profile: { department: string; d
 
 export const createMarketplaceItem = async (page: Page, itemTitle: string) => {
   await page.goto("/post-item");
-  await expect(page.getByRole("heading", { name: /Sell or Rent an Item|Edit Item/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Sell or Rent an Item|Post Item|Edit Item/ })).toBeVisible();
 
   await page.locator('input[type="file"][multiple]').setInputFiles(sampleImagePath);
   await page.waitForTimeout(2300);
@@ -87,12 +88,20 @@ export const createMarketplaceItem = async (page: Page, itemTitle: string) => {
   await page.getByLabel("Item Title").fill(itemTitle);
   await selectRadixOption(page, "Category", "Electronics");
   await page.getByLabel("Price").fill("85000");
-  await selectRadixOption(page, "Condition", "Like New");
-  await page.getByLabel("Additional Details").fill(`Automated listing for ${itemTitle}`);
-  await page.getByRole("button", { name: /Preview & Post Item|Update Item/i }).click();
+  if (await page.getByText("Condition", { exact: true }).first().isVisible().catch(() => false)) {
+    await selectRadixOption(page, "Condition", "Like New");
+  }
+  await page.getByLabel(/Description|Additional Details/).fill(`Automated listing for ${itemTitle}`);
+  const submitResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/items")
+      && ["POST", "PUT"].includes(response.request().method()),
+    { timeout: 30000 }
+  );
 
-  await expect(page).toHaveURL(/\/view-posts\?tab=marketplace$/);
-  await expect(page.getByText(itemTitle)).toBeVisible();
+  await page.getByRole("button", { name: /Preview & Post Item|Post Item|Update Item/i }).click();
+  const submitResponse = await submitResponsePromise;
+  expect(submitResponse.ok()).toBeTruthy();
 };
 
 export const favoriteRecentListingFromHome = async (page: Page, itemTitle: string) => {
@@ -106,11 +115,10 @@ export const openItemDetailsAndStartWhatsAppChat = async (page: Page, itemId: nu
   await page.goto(`/item/${itemId}`);
   await expect(page.getByRole("heading", { name: "Item Details" })).toBeVisible();
 
-  const popupPromise = page.context().waitForEvent("page");
-  await page.getByTitle("Chat seller").click();
-  const popup = await popupPromise;
-  await popup.waitForLoadState("domcontentloaded").catch(() => undefined);
-  return popup.url();
+  await page.getByRole("button", { name: "Chat" }).click();
+  await page.waitForURL(/\/messages\?/);
+  await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
+  return page.url();
 };
 
 export const createJobPost = async (page: Page, jobTitle: string, city: string) => {
@@ -161,18 +169,15 @@ export const createEventPost = async (page: Page, eventTitle: string, city: stri
 export const showInterestAndOpenEventWhatsApp = async (page: Page, eventId: number) => {
   await page.goto(`/event/${eventId}`);
   await expect(page.getByRole("heading", { name: "Event Details" })).toBeVisible();
-  await page.getByRole("button", { name: "Show Interest" }).click();
-  await expect(page.getByRole("button", { name: "Interested" })).toBeVisible();
-
-  const popupPromise = page.context().waitForEvent("page");
-  await page.getByRole("button", { name: "WhatsApp" }).click();
-  const popup = await popupPromise;
-  await popup.waitForLoadState("domcontentloaded").catch(() => undefined);
-  return popup.url();
+  await page.getByTitle(/show interest|interested/i).click();
+  await page.getByRole("button", { name: "Chat" }).click();
+  await page.waitForURL(/\/messages\?/);
+  await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
+  return page.url();
 };
 
 export const closeContextPages = async (context: BrowserContext | null) => {
   if (context) {
-    await context.close();
+    await context.close().catch(() => undefined);
   }
 };

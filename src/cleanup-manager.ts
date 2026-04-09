@@ -32,36 +32,49 @@ export class CleanupManager {
     this.eventParticipants.push({ eventId, userKey });
   }
 
+  private async safe(taskName: string, task: () => Promise<void>) {
+    try {
+      await task();
+    } catch (error) {
+      console.warn(`[cleanup] ${taskName} skipped:`, error);
+    }
+  }
+
   async run(api: CorpXApi) {
     for (const participant of this.eventParticipants.reverse()) {
       const user = this.users.get(participant.userKey);
       if (!user) {
         continue;
       }
-      await api.leaveEvent(participant.eventId, user.employeeId, user.token);
+      await this.safe(`leaveEvent(${participant.eventId}, ${user.employeeId})`, () =>
+        api.leaveEvent(participant.eventId, user.employeeId, user.token)
+      );
     }
 
     for (const user of this.users.values()) {
-      const favorites = await api.getFavorites(user.token);
+      let favorites = [];
+      await this.safe(`getFavorites(${user.employeeId})`, async () => {
+        favorites = await api.getFavorites(user.token);
+      });
       for (const favorite of favorites) {
-        await api.deleteFavorite(favorite.id, user.token);
+        await this.safe(`deleteFavorite(${favorite.id})`, () => api.deleteFavorite(favorite.id, user.token));
       }
     }
 
     for (const eventId of Array.from(this.eventIds).reverse()) {
-      await api.deleteEvent(eventId);
+      await this.safe(`deleteEvent(${eventId})`, () => api.deleteEvent(eventId));
     }
 
     for (const jobId of Array.from(this.jobIds).reverse()) {
-      await api.deleteJob(jobId);
+      await this.safe(`deleteJob(${jobId})`, () => api.deleteJob(jobId));
     }
 
     for (const itemId of Array.from(this.itemIds).reverse()) {
-      await api.deleteItem(itemId);
+      await this.safe(`deleteItem(${itemId})`, () => api.deleteItem(itemId));
     }
 
     for (const user of Array.from(this.users.values()).reverse()) {
-      await api.deleteEmployee(user.employeeId);
+      await this.safe(`deleteEmployee(${user.employeeId})`, () => api.deleteEmployee(user.employeeId));
     }
   }
 }

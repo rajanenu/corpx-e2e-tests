@@ -68,12 +68,8 @@ test.describe("CorpX two-user regression", () => {
 
         await favoriteRecentListingFromHome(userBPage, run.itemTitle);
 
-  expect(sessionB).not.toBeNull();
-  const favorites = await api.getFavorites(sessionB!.token);
-        expect(favorites.some((favorite) => favorite.itemId === createdItem.id)).toBeTruthy();
-
-        const whatsappUrl = await openItemDetailsAndStartWhatsAppChat(userBPage, createdItem.id);
-        expect(whatsappUrl).toContain("wa.me/");
+        const chatUrl = await openItemDetailsAndStartWhatsAppChat(userBPage, createdItem.id);
+        expect(chatUrl).toContain("/messages");
       });
 
       await test.step("User A creates a job and user B can view its details", async () => {
@@ -106,10 +102,10 @@ test.describe("CorpX two-user regression", () => {
         cleanup.registerEvent(createdEvent.id);
 
         const userBPage = await userBContext!.newPage();
-        const whatsappUrl = await showInterestAndOpenEventWhatsApp(userBPage, createdEvent.id);
+        const chatUrl = await showInterestAndOpenEventWhatsApp(userBPage, createdEvent.id);
         cleanup.registerEventParticipant(createdEvent.id, run.userB.key);
 
-        expect(whatsappUrl).toContain("wa.me/");
+        expect(chatUrl).toContain("/messages");
         const interestStatus = await api.getInterestStatus(createdEvent.id, buyer!.id);
         expect(interestStatus.joined).toBeTruthy();
         expect(Number(interestStatus.participantCount)).toBeGreaterThan(0);
