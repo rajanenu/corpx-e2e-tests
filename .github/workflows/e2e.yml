@@ -25,7 +25,28 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Validate required secrets
+        id: preflight
+        env:
+          CORPX_BASE_URL: ${{ secrets.CORPX_BASE_URL }}
+          CORPX_API_BASE_URL: ${{ secrets.CORPX_API_BASE_URL }}
+          CORPX_FIXED_OTP: ${{ secrets.CORPX_FIXED_OTP }}
+        run: |
+          missing=0
+          for var in CORPX_BASE_URL CORPX_API_BASE_URL CORPX_FIXED_OTP; do
+            if [[ -z "${!var}" ]]; then
+              echo "Missing required secret: $var"
+              missing=1
+            fi
+          done
+          if [[ "$missing" -eq 1 ]]; then
+            echo "run_e2e=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_e2e=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run regression suite
+        if: steps.preflight.outputs.run_e2e == 'true'
         env:
           CORPX_BASE_URL: ${{ secrets.CORPX_BASE_URL }}
           CORPX_API_BASE_URL: ${{ secrets.CORPX_API_BASE_URL }}
@@ -33,6 +54,10 @@ jobs:
           CORPX_DEFAULT_CITY: ${{ secrets.CORPX_DEFAULT_CITY }}
           CORPX_FIXED_OTP: ${{ secrets.CORPX_FIXED_OTP }}
         run: npm test
+
+      - name: Skip notice
+        if: steps.preflight.outputs.run_e2e != 'true'
+        run: echo "Skipping E2E run because required secrets are not configured."
 
       - name: Upload report
         if: always()
