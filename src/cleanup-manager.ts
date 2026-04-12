@@ -1,4 +1,4 @@
-import { CorpXApi } from "./corpx-api";
+import { CorpXApi, FavoriteRecord } from "./corpx-api";
 
 interface CleanupUser {
   employeeId: number;
@@ -52,7 +52,7 @@ export class CleanupManager {
     }
 
     for (const user of this.users.values()) {
-      let favorites = [];
+      let favorites: FavoriteRecord[] = [];
       await this.safe(`getFavorites(${user.employeeId})`, async () => {
         favorites = await api.getFavorites(user.token);
       });

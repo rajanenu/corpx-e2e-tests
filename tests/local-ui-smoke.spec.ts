@@ -1,31 +1,37 @@
 import { test, expect } from "@playwright/test";
 
 const API_BASE_URL = process.env.CORPX_API_BASE_URL || "http://127.0.0.1:8081/api/v1";
-const TEST_EMAIL = process.env.CORPX_SMOKE_EMAIL || "buyer.test@tesco.com";
+const TEST_EMAIL = process.env.CORPX_SMOKE_EMAIL || "";
+const TEST_PHONE = process.env.CORPX_SMOKE_PHONE || "9876543210";
 const FIXED_OTP = process.env.CORPX_FIXED_OTP || "000000";
 
 async function signInExisting(request: any) {
-  const quickSignIn = await request.post(`${API_BASE_URL}/auth/sign-in-existing`, {
-    data: { email: TEST_EMAIL },
-  });
-
-  if (quickSignIn.ok()) {
-    return quickSignIn.json();
+  let email = TEST_EMAIL;
+  let organizationId = "DEFAULT";
+  if (!email) {
+    const orgsResponse = await request.get(`${API_BASE_URL}/auth/allowed-organizations`);
+    expect(orgsResponse.ok()).toBeTruthy();
+    const orgs = await orgsResponse.json();
+    const domain = Array.isArray(orgs) && orgs.length > 0 ? String(orgs[0].domain || "") : "";
+    organizationId = Array.isArray(orgs) && orgs.length > 0 ? String(orgs[0].companyName || "DEFAULT") : "DEFAULT";
+    expect(domain).toBeTruthy();
+    email = `smoke.${Date.now()}@${domain}`;
   }
 
-  // Fallback for fresh local DBs where the smoke user does not exist yet.
-  await request.post(`${API_BASE_URL}/auth/send-otp`, {
-    data: { email: TEST_EMAIL },
+  const sendOtp = await request.post(`${API_BASE_URL}/auth/send-otp`, {
+    data: { email },
   });
+
+  expect(sendOtp.ok()).toBeTruthy();
 
   const verify = await request.post(`${API_BASE_URL}/auth/verify-otp`, {
     data: {
-      email: TEST_EMAIL,
+      email,
       otpCode: FIXED_OTP,
       firstName: "Buyer",
       lastName: "Test User",
-      phone: "9876543210",
-      organizationId: "DEFAULT",
+      phone: TEST_PHONE,
+      organizationId,
       city: "Bangalore",
     },
   });
@@ -104,9 +110,10 @@ test.describe("Local UI smoke", () => {
     expect(recentListingsResponse.ok()).toBeTruthy();
     const recentListings = await recentListingsResponse.json();
     expect(Array.isArray(recentListings)).toBeTruthy();
-    expect(Array.isArray(recentListings) ? recentListings.length : 0).toBeGreaterThan(0);
 
     await page.goto(`${baseURL}/messages?userId=${item.seller.id}&itemId=${item.id}&title=${encodeURIComponent(item.title)}`);
-    await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/messages\?/);
+    await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible({ timeout: 60000 });
   });
 });

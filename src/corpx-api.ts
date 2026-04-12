@@ -13,7 +13,14 @@ export interface EmployeeRecord {
 
 export interface AuthSession {
   token: string;
+  refreshToken?: string;
   user: EmployeeRecord;
+}
+
+export interface VerificationStatus {
+  professionalEmailVerifiedAt?: string | null;
+  professionalEmailReverifyDueAt?: string | null;
+  professionalEmailReverifyRequired?: boolean;
 }
 
 export interface FavoriteRecord {
@@ -62,6 +69,44 @@ export class CorpXApi {
 
     expect(response.ok()).toBeTruthy();
     return response.json();
+  }
+
+  async sendPhoneOtp(phone: string) {
+    return this.request.post(`${config.apiBaseUrl}/auth/phone/send-otp`, {
+      headers: buildHeaders(),
+      data: { phone },
+    });
+  }
+
+  async verifyPhoneOtp(phone: string, otpCode: string, deviceId = `e2e-${Date.now()}`): Promise<AuthSession> {
+    const response = await this.request.post(`${config.apiBaseUrl}/auth/phone/verify-otp`, {
+      headers: buildHeaders(),
+      data: { phone, otpCode, deviceId, deviceHint: "playwright-e2e" },
+    });
+    expect(response.ok()).toBeTruthy();
+    return response.json();
+  }
+
+  async refreshAccessToken(refreshToken: string, deviceId = `e2e-${Date.now()}`) {
+    return this.request.post(`${config.apiBaseUrl}/auth/refresh`, {
+      headers: buildHeaders(),
+      data: { refreshToken, deviceId },
+    });
+  }
+
+  async getVerificationStatus(token: string): Promise<VerificationStatus> {
+    const response = await this.request.get(`${config.apiBaseUrl}/users/profile/verification-status`, {
+      headers: buildHeaders(token),
+    });
+    expect(response.ok()).toBeTruthy();
+    return response.json();
+  }
+
+  async updateProfile(token: string, data: Record<string, unknown>) {
+    return this.request.put(`${config.apiBaseUrl}/users/profile`, {
+      headers: buildHeaders(token),
+      data,
+    });
   }
 
   async getEmployeeByEmail(email: string): Promise<EmployeeRecord | null> {

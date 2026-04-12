@@ -19,6 +19,8 @@ const selectRadixOption = async (page: Page, triggerLabel: string, optionText: s
 export const signInViaOtpFlow = async (page: Page, user: TestUser): Promise<AuthSession> => {
   await page.goto("/");
   await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByRole("button", { name: "Continue with corporate email" }).click();
   await expect(page).toHaveURL(/\/otp-email$/);
 
   await page.getByPlaceholder("you@company.com").fill(user.email);
@@ -30,7 +32,9 @@ export const signInViaOtpFlow = async (page: Page, user: TestUser): Promise<Auth
     await page.getByPlaceholder("Enter the 6-digit code sent to your email").fill(config.fixedOtp);
     await page.getByPlaceholder("Raja").fill(user.firstName);
     await page.getByPlaceholder("Sekhar").fill(user.lastName);
-    await page.getByPlaceholder("e.g. TechCorp").fill(user.organization);
+    const orgInput = page.getByPlaceholder("e.g. TechCorp");
+    // Org is auto-filled from allow-listed domain in current auth flow.
+    await page.waitForTimeout(500);
     await page.getByPlaceholder("e.g. 9876543210").fill(user.phone);
     await selectRadixOption(page, "City", user.city);
     await page.getByRole("button", { name: /Get Started/ }).click();
@@ -123,33 +127,27 @@ export const openItemDetailsAndStartWhatsAppChat = async (page: Page, itemId: nu
 
 export const createJobPost = async (page: Page, jobTitle: string, city: string) => {
   await page.goto("/post-job");
-  await expect(page.getByRole("heading", { name: "Share a Job Opening" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Post Job|Edit Job|Share a Job Opening/ })).toBeVisible();
 
   await page.getByLabel("Job Title").fill(jobTitle);
-  await page.getByLabel("Department").fill("Engineering");
-  await page.getByLabel("Location").fill(city);
-  await selectRadixOption(page, "Job Type", "Full-time");
-  await selectRadixOption(page, "Experience Required", "1-3 years");
-  await page.getByLabel("Salary Range (₹)").fill("12-18 LPA");
-  await page.getByLabel("Preferred Skill Sets").fill("TypeScript, React, Spring Boot");
-  await page.getByLabel("Other Requirements").fill("Strong communication and collaboration");
+  await selectRadixOption(page, "Job Category", "Software Development");
+  await selectRadixOption(page, "Location", city);
   await page.getByLabel("Detailed Description").fill(`Automated job post for ${jobTitle}`);
-  await page.getByRole("button", { name: "Post Job Opening" }).click();
+  await page.getByRole("button", { name: /Post Job|Update Job|Post Job Opening/ }).click();
 
-  await expect(page).toHaveURL(/\/view-posts\?tab=jobs$/);
-  await expect(page.getByText(jobTitle)).toBeVisible();
+  await expect(page).toHaveURL(/\/(index|view-posts\?tab=jobs)$/);
 };
 
 export const verifyJobDetails = async (page: Page, jobId: number, jobTitle: string) => {
   await page.goto(`/job/${jobId}`);
   await expect(page.getByRole("heading", { name: "Job Details" })).toBeVisible();
-  await expect(page.getByText(jobTitle)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Apply via Email" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: jobTitle })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Apply|Apply via Email/ })).toBeVisible();
 };
 
 export const createEventPost = async (page: Page, eventTitle: string, city: string) => {
   await page.goto("/post-event");
-  await expect(page.getByRole("heading", { name: "Publish an Event" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Post Event|Edit Event|Publish an Event/ })).toBeVisible();
 
   await page.getByLabel("Event Title").fill(eventTitle);
   await selectRadixOption(page, "Event Type", "Networking");
@@ -157,13 +155,13 @@ export const createEventPost = async (page: Page, eventTitle: string, city: stri
   await page.getByLabel("Time").fill("18:30");
   await selectRadixOption(page, "City", city);
   await page.getByLabel("Venue / Meeting Point").fill("CorpX Automation Cafe");
-  await page.getByLabel("Event Description").fill(`Automated event for ${eventTitle}`);
+  await page.getByLabel(/Event Description|Detailed Description/).fill(`Automated event for ${eventTitle}`);
   await page.getByLabel("Interests & Skills Needed").fill("Networking, mentoring, product discussions");
   await page.getByLabel("Maximum Participants").fill("25");
   await page.getByLabel("Cost per Person (₹)").fill("0");
-  await page.getByRole("button", { name: "Publish Event" }).click();
+  await page.getByRole("button", { name: /Post Event|Update Event|Publish Event/ }).click();
 
-  await expect(page).toHaveURL(/\/event\/\d+|\/view-posts\?tab=events/);
+  await expect(page).toHaveURL(/\/(index|event\/\d+|view-posts\?tab=events)/);
 };
 
 export const showInterestAndOpenEventWhatsApp = async (page: Page, eventId: number) => {

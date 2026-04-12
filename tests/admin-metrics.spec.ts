@@ -1,11 +1,32 @@
 import { expect, test } from "@playwright/test";
 
 const API_BASE_URL = process.env.CORPX_API_BASE_URL || "http://127.0.0.1:8081/api/v1";
-const ADMIN_EMAIL = process.env.CORPX_ADMIN_EMAIL || "admin@corpx.com";
+const FIXED_OTP = process.env.CORPX_FIXED_OTP || "000000";
 
 async function signInAdmin(request: any) {
-  const response = await request.post(`${API_BASE_URL}/auth/sign-in-existing`, {
-    data: { email: ADMIN_EMAIL },
+  const orgsResponse = await request.get(`${API_BASE_URL}/auth/allowed-organizations`);
+  expect(orgsResponse.ok()).toBeTruthy();
+  const orgs = await orgsResponse.json();
+  const domain = Array.isArray(orgs) && orgs.length > 0 ? String(orgs[0].domain || "") : "";
+  const organization = Array.isArray(orgs) && orgs.length > 0 ? String(orgs[0].companyName || "DEFAULT") : "DEFAULT";
+  expect(domain).toBeTruthy();
+  const email = `admin-metrics.${Date.now()}@${domain}`;
+
+  const sendOtpResponse = await request.post(`${API_BASE_URL}/auth/send-otp`, {
+    data: { email },
+  });
+  expect(sendOtpResponse.ok()).toBeTruthy();
+
+  const response = await request.post(`${API_BASE_URL}/auth/verify-otp`, {
+    data: {
+      email,
+      otpCode: FIXED_OTP,
+      firstName: "CorpX",
+      lastName: "Admin",
+      phone: "9000000000",
+      organizationId: organization,
+      city: "Bangalore",
+    },
   });
   expect(response.ok()).toBeTruthy();
   return response.json();
